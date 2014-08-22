@@ -1,0 +1,58 @@
+##Course Assignment for Machine Learning Class
+
+#Load in the data set
+
+
+```{r, echo=F}
+
+training<-read.csv("train.csv")
+library(caret)
+library(plyr)
+library(dplyr)
+library(psych)
+```
+#Clean up the Data Set
+Let's now find out of the 160 variables, which ones have little effect as predictors for our model. We will use our nearzeroVar() to determine which covariates have little to no variance and subsequently filter them out of our data set. 
+
+```{r, echo=FALSE}
+nzvar<-nearZeroVar(training,saveMetrics=T)
+nzvar<-data.frame(row.names(nzvar),nzvar)
+nzvar$row.num<-1:160
+nzvarfalse<-filter(nzvar,nzv=="FALSE")
+
+training<-select(training, 3:5,7:11,18:19,21:22,24:25,27:50,60:68,76:77,80, 83:86, 93:94,96:97,99:100,102:124,132,135,138,140:141,151:160)
+
+descrip<-describe(training)
+training<-select(training,1:8,25:37,39:47,52:54,61,72:83,87,89:98)
+inTrain<-createDataPartition(training$classe, p=.6, list=F)
+train1<-training[inTrain,]
+val1<-training[-inTrain,]
+
+
+testing<-read.csv("test.csv")
+testing<-select(testing, 3:5,7:11,18:19,21:22,24:25,27:50,60:68,76:77,80, 83:86, 93:94,96:97,99:100,102:124,132,135,138,140:141,151:160)
+
+testing<-select(testing,1:8,25:37,39:47,52:54,61,72:83,87,89:98)
+```
+#Build the model
+Now that I have tidyed up my data set, reducing the number of variables from 160 to 57, I can move forward with building the model. Ultimately I used the functions nearZeroVar, to find out which functions had close to zero variance, which I could then drop from my data set as they make for terrible predictors. I also used the describe() to find out how many variables had full data sets and which ones were chalked full of NA's/NULL's etc. Variables that had major holes in their data sets were also dropped
+
+Now we are going to build the model using the the train() from the caret packages. I'm using the  C5.0 algorithm. This is a gradient boosted tree classifier, ideal for this kind of precition. I selected it because gradient boosting on a tree classifier is highly respected in the statistical computation community. Likewise, at the 2014 useR conference, I watched Dr. Kuhn (developer of the caret package) run a model comparison of a variety of machine learning algorithims, and C5.0 beat out other algorithims like CART, FDA, Support Vector Machines, etc. As there is a heavy computational element for this algorithm, I will also be taking advantage of parallel processing on my quad core computer. 
+
+I partioned my intial data from "training" into a large sample "train1", and then a smaller test sample called "val1". Predicting on val1 and using my confusionMatrix() will let me know the out of sample error rate (measured by the accuracy metric).
+```{r, echo=FALSE}
+library(doParallel)
+registerDoParallel(cores = 4)
+
+set.seed(1245)
+modfitc5<-train(classe~.,data=train1, method="C5.0", prox=T, trControl= trainControl(method = "boot", number = 25, allowParallel = TRUE,verboseIter = TRUE))
+
+predc5<-predict(modfitc5,newdata=val1)
+confusionMatrix(predc5,val1$classe)
+```
+#Test Results and out of sample error
+From our confusion Matrix, we can see that the best model selected by our train() has done extremely well with an accuracy of .997, which correpsonds with an extremely low out of sample error rate, by testing our model on the "test" sample (val1). 
+
+When we were training our model, I   used a very computationally intensive technique called bootstrapping in order to resample the data and select the best model. I used "bootstrapping" because it is an excellent resampling technique that keeps bias low yet maintains a low level of variation (best of both worlds). Certainly, I could manually do the cross validation and keep testing new models against our "test" sample, but the train() does this for us, allowing us to simply run our best model only one time against our val1 data and get our best out of sample error rate. 
+
+As it turns out, using this model, I go 20/20 on the 20 test samples for this assignment.
